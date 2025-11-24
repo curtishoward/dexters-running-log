@@ -102,7 +102,7 @@
   <div id="map"></div>
 
   <div class="overlay">
-    <h1>Dexter's cross-country run... 🐹</h1>
+    <h1>Dexter is running... 🐹</h1>
     <div class="sub">
       From Lake Placid, NY to Whiskerville, NV 
       <span id="miles-text">Loading miles…</span>
@@ -325,9 +325,20 @@
       });
 
       // Hamster marker at current position
+      // const markerEl = document.createElement("div");
+      // markerEl.className = "hamster-marker";
+      // markerEl.textContent = "🐹";
       const markerEl = document.createElement("div");
-      markerEl.className = "hamster-marker";
-      markerEl.textContent = "🐹";
+      markerEl.style.width = "40px";
+      markerEl.style.height = "40px";
+      markerEl.style.backgroundImage = "url('hamster.png')";
+      markerEl.style.backgroundSize = "cover";
+      markerEl.style.backgroundRepeat = "no-repeat";
+      markerEl.style.backgroundPosition = "center";
+      markerEl.style.borderRadius = "50%";
+
+new mapboxgl.Marker(markerEl).setLngLat(progressCoord).addTo(map);
+
 
       new mapboxgl.Marker(markerEl).setLngLat(progressCoord).addTo(map);
     });
