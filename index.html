@@ -96,15 +96,71 @@
     .mapboxgl-ctrl-attrib {
       filter: invert(1) grayscale(1);
     }
+
+    /* NEW: panel for scrollable data log */
+    .data-panel {
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+      width: 260px;
+      max-height: 45vh;
+      background: rgba(0, 0, 0, 0.78);
+      border-radius: 12px;
+      padding: 10px 12px;
+      z-index: 1;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(4px);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .data-panel h2 {
+      margin: 0 0 6px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .data-scroll {
+      overflow-y: auto;
+      padding-right: 4px;
+      margin-top: 4px;
+    }
+
+    .data-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 12px;
+      padding: 3px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .data-row:last-child {
+      border-bottom: none;
+    }
+
+    .data-date {
+      opacity: 0.85;
+      margin-right: 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 140px;
+    }
+
+    .data-miles {
+      font-weight: 600;
+      white-space: nowrap;
+    }
   </style>
 </head>
 <body>
   <div id="map"></div>
 
   <div class="overlay">
-    <h1>Dexter is running... 🐹</h1>
+    <h1>Hamster Road Trip 🐹</h1>
     <div class="sub">
-      From Lake Placid, NY to Whiskerville, NV 
+      From Lake Placid, NY to Whiskerville, NV
       <span id="miles-text">Loading miles…</span>
     </div>
     <div class="progress-bar">
@@ -112,6 +168,14 @@
     </div>
     <div class="status-text" id="status-text">
       Fetching progress from Google Sheets…
+    </div>
+  </div>
+
+  <!-- NEW: Daily data panel -->
+  <div class="data-panel">
+    <h2>Daily Log</h2>
+    <div class="data-scroll" id="data-scroll">
+      Loading…
     </div>
   </div>
 
@@ -124,16 +188,14 @@
     mapboxgl.accessToken = "pk.eyJ1IjoiY3VydGlzaG93YXJkIiwiYSI6ImNtaWI1YnA5ZzE1MTkyanExdWg4dmc5MWEifQ.UeuMab1ki_KJpCB91dxpZw";
 
     // B. Public CSV export URL for your sheet
-    //    Example:
-    //    "https://docs.google.com/spreadsheets/d/XXXXX/export?format=csv&gid=0"
     const SHEET_CSV_URL =
-      "https://docs.google.com/spreadsheets/d/e/2PACX-1vTdu2BBgNxkmkLfbIl_Z5QbySg9AKsesA3tbM5t95rmxEQaXMBakGipnxYdancyBEFdEfvBjTFQhrIn/pub?gid=0&single=true&output=csv"
+      "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID_HERE/export?format=csv&gid=0";
 
     // 2) ROUTE CONFIG
-    // Lake Placid, NY (approx) -> Whiskerville, NV
+    // Lake Placid, NY (approx) -> Whiskerville, Nevada (approx)
     // [lon, lat]
-    const START = [-73.9849, 44.3215];     // Lake Placid
-    const END   = [-118.793, 39.474];      // Whiskerville, NV
+    const START = [-73.9849, 44.3215];    // Lake Placid
+    const END   = [-118.793, 39.474];     // Whiskerville, NV
 
     // 3) HELPER FUNCTIONS
 
@@ -171,9 +233,8 @@
       return [lerp(start[0], end[0], t), lerp(start[1], end[1], t)];
     }
 
-    // Sum the miles from the first column of the CSV.
-    // Assumes optional header row (which is skipped if not numeric).
-    async function getTotalMilesFromSheet() {
+    // NEW: read both miles (col A) and date (col B)
+    async function getMilesDataFromSheet() {
       const resp = await fetch(SHEET_CSV_URL);
       if (!resp.ok) {
         throw new Error("Failed to fetch sheet CSV");
@@ -183,23 +244,32 @@
       const lines = text.trim().split(/\r?\n/);
 
       let total = 0;
+      const records = [];
+
       for (let i = 0; i < lines.length; i++) {
         const cols = lines[i].split(",");
-        const raw = cols[0]?.trim();
-        if (!raw) continue;
+        const milesRaw = cols[0]?.trim();
+        const dateRaw = cols[1]?.trim() || "";
 
-        const value = parseFloat(raw);
+        if (!milesRaw) continue;
 
-        // Skip header row if first value is not a number
-        if (i === 0 && Number.isNaN(value)) {
+        const miles = parseFloat(milesRaw);
+
+        // Skip header row if first is not numeric
+        if (i === 0 && Number.isNaN(miles)) {
           continue;
         }
 
-        if (!Number.isNaN(value)) {
-          total += value;
+        if (!Number.isNaN(miles)) {
+          total += miles;
+          records.push({
+            miles,
+            date: dateRaw || `Day ${records.length + 1}`
+          });
         }
       }
-      return total;
+
+      return { totalMiles: total, records };
     }
 
     // 4) INITIALIZE MAP
@@ -207,7 +277,7 @@
     const map = new mapboxgl.Map({
       container: "map",
       style: "mapbox://styles/mapbox/dark-v11",
-      center: [-90, 35], // Roughly central US
+      center: [-100, 40], // somewhere between start and end
       zoom: 3
     });
 
@@ -217,6 +287,7 @@
       const milesTextEl = document.getElementById("miles-text");
       const progressBarInner = document.getElementById("progress-bar-inner");
       const statusTextEl = document.getElementById("status-text");
+      const dataScrollEl = document.getElementById("data-scroll");
 
       // Draw full route as a straight line
       const fullRouteGeojson = {
@@ -259,15 +330,42 @@
         duration: 0
       });
 
-      let totalMiles;
+      let sheetData;
       try {
-        totalMiles = await getTotalMilesFromSheet();
+        sheetData = await getMilesDataFromSheet();
       } catch (err) {
         console.error(err);
         milesTextEl.textContent = "Could not load miles.";
         statusTextEl.textContent =
           "Check that your sheet is published as CSV and accessible.";
+        dataScrollEl.textContent = "Error loading data.";
         return;
+      }
+
+      const { totalMiles, records } = sheetData;
+
+      // Build scrollable data log (most recent at top)
+      dataScrollEl.innerHTML = "";
+      if (!records.length) {
+        dataScrollEl.textContent = "No data rows found.";
+      } else {
+        const reversed = records.slice().reverse();
+        reversed.forEach((row) => {
+          const rowEl = document.createElement("div");
+          rowEl.className = "data-row";
+
+          const dateSpan = document.createElement("span");
+          dateSpan.className = "data-date";
+          dateSpan.textContent = row.date || "—";
+
+          const milesSpan = document.createElement("span");
+          milesSpan.className = "data-miles";
+          milesSpan.textContent = `${row.miles.toFixed(2)} mi`;
+
+          rowEl.appendChild(dateSpan);
+          rowEl.appendChild(milesSpan);
+          dataScrollEl.appendChild(rowEl);
+        });
       }
 
       const routeMiles = haversineMiles(START, END);
@@ -336,9 +434,7 @@
       markerEl.style.backgroundRepeat = "no-repeat";
       markerEl.style.backgroundPosition = "center";
       markerEl.style.borderRadius = "50%";
-
-new mapboxgl.Marker(markerEl).setLngLat(progressCoord).addTo(map);
-
+      markerEl.style.filter = "drop-shadow(0px 2px 6px rgba(0,0,0,0.6))";
 
       new mapboxgl.Marker(markerEl).setLngLat(progressCoord).addTo(map);
     });
