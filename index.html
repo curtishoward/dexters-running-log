@@ -92,6 +92,26 @@
       opacity: 0.75;
     }
 
+    .chart-wrap {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .chart-title {
+      font-size: 10px;
+      opacity: 0.5;
+      margin-bottom: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    #pace-chart {
+      display: block;
+      width: 100%;
+      overflow: visible;
+    }
+
     .hamster-marker {
       font-size: 28px;
       line-height: 1;
@@ -120,6 +140,11 @@
       Fetching progress from Google Sheets…
     </div>
     <div class="eta-text" id="eta-text"></div>
+    <div class="chart-wrap" id="chart-wrap" style="display:none">
+      <div class="chart-title">30-day rolling pace (mi/day)</div>
+      <svg id="pace-chart" viewBox="0 0 252 55"
+           preserveAspectRatio="none" height="55"></svg>
+    </div>
   </div>
 
   <!-- Mapbox GL JS -->
@@ -236,6 +261,63 @@
       }
 
       return { total, rows };
+    }
+
+    // Draw a 30-day rolling-average pace sparkline into #pace-chart.
+    // rows must be sorted chronologically: Array<{ miles, date }>.
+    function drawPaceChart(rows) {
+      if (rows.length < 2) return;
+
+      const W = 252, H = 55;
+      const PAD_T = 4, PAD_B = 4;
+      const plotH = H - PAD_T - PAD_B;
+
+      // Compute 30-day moving average for every row.
+      // Walk backwards from each row until the 30-day window is exhausted.
+      const avgs = rows.map((row, i) => {
+        const cutoff = new Date(row.date);
+        cutoff.setDate(cutoff.getDate() - 29); // inclusive 30-day window
+        let sum = 0;
+        for (let j = i; j >= 0; j--) {
+          if (rows[j].date < cutoff) break;
+          sum += rows[j].miles;
+        }
+        return sum / 30;
+      });
+
+      const maxVal = Math.max(...avgs);
+      const minVal = 0;
+      const range = maxVal - minVal || 1;
+
+      const n = avgs.length;
+      const toX = i  => ((i / (n - 1)) * W).toFixed(2);
+      const toY = v  => (PAD_T + plotH * (1 - (v - minVal) / range)).toFixed(2);
+
+      // Polyline points for the rolling-average line
+      const linePts = avgs.map((v, i) => `${toX(i)},${toY(v)}`).join(" ");
+
+      // Filled area — close back along the bottom edge
+      const lastX  = toX(n - 1);
+      const baseY  = (PAD_T + plotH).toFixed(2);
+      const fillPts = `${toX(0)},${baseY} ${linePts} ${lastX},${baseY}`;
+
+      // Horizontal guide at the current (most-recent) pace
+      const curY = toY(avgs[n - 1]);
+
+      const svg = document.getElementById("pace-chart");
+      svg.innerHTML = `
+        <polygon points="${fillPts}"
+                 fill="rgba(255,208,74,0.12)"/>
+        <line x1="0" y1="${curY}" x2="${W}" y2="${curY}"
+              stroke="rgba(255,208,74,0.22)" stroke-width="1"
+              stroke-dasharray="3,3"/>
+        <polyline points="${linePts}"
+                  fill="none" stroke="#ffd04a" stroke-width="1.5"
+                  stroke-linejoin="round" stroke-linecap="round"/>
+        <circle cx="${lastX}" cy="${curY}" r="2.5" fill="#ffd04a"/>
+      `;
+
+      document.getElementById("chart-wrap").style.display = "";
     }
 
     // 4) INITIALIZE MAP
@@ -356,6 +438,9 @@
           }
         }
       }
+
+      // Pace sparkline — shown regardless of whether Dexter has arrived
+      if (rows.length > 0) drawPaceChart(rows);
 
       // Animate the progress bar
       progressBarInner.style.width = `${fraction * 100}%`;
