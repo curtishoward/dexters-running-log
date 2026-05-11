@@ -130,7 +130,7 @@
   <div class="overlay">
     <h1>Dexter's cannonball run... 🐹</h1>
     <div class="sub">
-      From Lake Placid, NY to Whiskerville, NV 
+      From Lake Placid, NY to Tunnel Hill, GA
       <span id="miles-text">Loading miles…</span>
     </div>
     <div class="progress-bar">
@@ -165,7 +165,7 @@
     // Lake Placid, NY (approx) -> Whiskerville, NV
     // [lon, lat]
     const START = [-73.9849, 44.3215];     // Lake Placid
-    const END   = [-118.793, 39.474];      // Whiskerville, NV
+    const END   = [-85.0427, 34.8406];     // Tunnel Hill, GA
 
     // 3) HELPER FUNCTIONS
 
@@ -406,7 +406,7 @@
 
       if (fraction >= 1) {
         statusTextEl.textContent =
-          "Dexter made it to Whiskerville, NV! 🎉🇲🇽";
+          "Dexter made it to Tunnel Hill, GA! 🎉🚇";
       } else {
         const milesRemaining = Math.max(routeMiles - totalMiles, 0);
         statusTextEl.textContent = `About ${milesRemaining.toFixed(
