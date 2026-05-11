@@ -285,16 +285,20 @@
         return sum / 30;
       });
 
-      const maxVal = Math.max(...avgs);
+      // Drop the first 29 entries so the chart starts once a full 30-day
+      // window is available (index 29 = the 30th day of data).
+      const trimmed = avgs.length > 29 ? avgs.slice(29) : avgs;
+
+      const maxVal = Math.max(...trimmed);
       const minVal = 0;
       const range = maxVal - minVal || 1;
 
-      const n = avgs.length;
+      const n = trimmed.length;
       const toX = i  => ((i / (n - 1)) * W).toFixed(2);
       const toY = v  => (PAD_T + plotH * (1 - (v - minVal) / range)).toFixed(2);
 
       // Polyline points for the rolling-average line
-      const linePts = avgs.map((v, i) => `${toX(i)},${toY(v)}`).join(" ");
+      const linePts = trimmed.map((v, i) => `${toX(i)},${toY(v)}`).join(" ");
 
       // Filled area — close back along the bottom edge
       const lastX  = toX(n - 1);
@@ -302,7 +306,7 @@
       const fillPts = `${toX(0)},${baseY} ${linePts} ${lastX},${baseY}`;
 
       // Horizontal guide at the current (most-recent) pace
-      const curY = toY(avgs[n - 1]);
+      const curY = toY(trimmed[n - 1]);
 
       const svg = document.getElementById("pace-chart");
       svg.innerHTML = `
