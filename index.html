@@ -86,6 +86,12 @@
       opacity: 0.9;
     }
 
+    .eta-text {
+      margin-top: 4px;
+      font-size: 12px;
+      opacity: 0.75;
+    }
+
     .hamster-marker {
       font-size: 28px;
       line-height: 1;
@@ -113,6 +119,7 @@
     <div class="status-text" id="status-text">
       Fetching progress from Google Sheets…
     </div>
+    <div class="eta-text" id="eta-text"></div>
   </div>
 
   <!-- Mapbox GL JS -->
@@ -171,9 +178,31 @@
       return [lerp(start[0], end[0], t), lerp(start[1], end[1], t)];
     }
 
-    // Sum the miles from the first column of the CSV.
-    // Assumes optional header row (which is skipped if not numeric).
-    async function getTotalMilesFromSheet() {
+    // Parse a single CSV line, respecting double-quoted fields (which may
+    // contain commas — e.g. "July 30, 2025").
+    function parseCSVLine(line) {
+      const cols = [];
+      let inQuote = false;
+      let current = "";
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          inQuote = !inQuote;
+        } else if (ch === "," && !inQuote) {
+          cols.push(current);
+          current = "";
+        } else {
+          current += ch;
+        }
+      }
+      cols.push(current);
+      return cols;
+    }
+
+    // Fetch the sheet CSV and return:
+    //   { total: number, rows: Array<{ miles: number, date: Date }> }
+    // Each row corresponds to one day's mileage entry.
+    async function getSheetData() {
       const resp = await fetch(SHEET_CSV_URL);
       if (!resp.ok) {
         throw new Error("Failed to fetch sheet CSV");
@@ -183,23 +212,30 @@
       const lines = text.trim().split(/\r?\n/);
 
       let total = 0;
+      const rows = [];
+
       for (let i = 0; i < lines.length; i++) {
-        const cols = lines[i].split(",");
+        const cols = parseCSVLine(lines[i]);
         const raw = cols[0]?.trim();
         if (!raw) continue;
 
-        const value = parseFloat(raw);
+        const miles = parseFloat(raw);
 
         // Skip header row if first value is not a number
-        if (i === 0 && Number.isNaN(value)) {
-          continue;
-        }
+        if (i === 0 && Number.isNaN(miles)) continue;
+        if (Number.isNaN(miles)) continue;
 
-        if (!Number.isNaN(value)) {
-          total += value;
+        total += miles;
+
+        // Column 1 holds the date string (e.g. "July 30, 2025")
+        const dateStr = cols[1]?.trim();
+        const date = dateStr ? new Date(dateStr) : null;
+        if (date && !isNaN(date.getTime())) {
+          rows.push({ miles, date });
         }
       }
-      return total;
+
+      return { total, rows };
     }
 
     // 4) INITIALIZE MAP
@@ -217,6 +253,7 @@
       const milesTextEl = document.getElementById("miles-text");
       const progressBarInner = document.getElementById("progress-bar-inner");
       const statusTextEl = document.getElementById("status-text");
+      const etaTextEl = document.getElementById("eta-text");
 
       // Draw full route as a straight line
       const fullRouteGeojson = {
@@ -259,9 +296,9 @@
         duration: 0
       });
 
-      let totalMiles;
+      let totalMiles, rows;
       try {
-        totalMiles = await getTotalMilesFromSheet();
+        ({ total: totalMiles, rows } = await getSheetData());
       } catch (err) {
         console.error(err);
         milesTextEl.textContent = "Could not load miles.";
@@ -289,6 +326,35 @@
         statusTextEl.textContent = `About ${milesRemaining.toFixed(
           1
         )} miles to go.`;
+
+        // --- Pace (last 30 days) + ETA ---
+        if (rows.length > 0) {
+          // Use the most recent date in the sheet as the reference point
+          const latestDate = rows[rows.length - 1].date;
+          const cutoff = new Date(latestDate);
+          cutoff.setDate(cutoff.getDate() - 29); // 30-day window inclusive
+
+          const recentMiles = rows
+            .filter(r => r.date >= cutoff)
+            .reduce((sum, r) => sum + r.miles, 0);
+
+          const dailyPace = recentMiles / 30;
+
+          if (dailyPace > 0) {
+            const daysToArrival = milesRemaining / dailyPace;
+            const etaDate = new Date(latestDate);
+            etaDate.setDate(etaDate.getDate() + Math.ceil(daysToArrival));
+
+            const etaFormatted = etaDate.toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric"
+            });
+
+            etaTextEl.textContent =
+              `Pace: ${dailyPace.toFixed(1)} mi/day (last 30d) · ETA: ${etaFormatted}`;
+          }
+        }
       }
 
       // Animate the progress bar
@@ -336,9 +402,6 @@
       markerEl.style.backgroundRepeat = "no-repeat";
       markerEl.style.backgroundPosition = "center";
       markerEl.style.borderRadius = "50%";
-
-new mapboxgl.Marker(markerEl).setLngLat(progressCoord).addTo(map);
-
 
       new mapboxgl.Marker(markerEl).setLngLat(progressCoord).addTo(map);
     });
