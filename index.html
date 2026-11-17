@@ -130,7 +130,7 @@
   <div class="overlay">
     <h1>Dexter's cannonball run... 🐹</h1>
     <div class="sub">
-      From Lake Placid, NY to Tunnel Hill, GA
+      From Lake Placid, NY to Dexter, NM
       <span id="miles-text">Loading miles…</span>
     </div>
     <div class="progress-bar">
@@ -162,10 +162,10 @@
       "https://docs.google.com/spreadsheets/d/e/2PACX-1vTdu2BBgNxkmkLfbIl_Z5QbySg9AKsesA3tbM5t95rmxEQaXMBakGipnxYdancyBEFdEfvBjTFQhrIn/pub?gid=0&single=true&output=csv"
 
     // 2) ROUTE CONFIG
-    // Lake Placid, NY (approx) -> Whiskerville, NV
+    // Lake Placid, NY (approx) -> Dexter, NM
     // [lon, lat]
     const START = [-73.9849, 44.3215];     // Lake Placid
-    const END   = [-85.0427, 34.8406];     // Tunnel Hill, GA
+    const END   = [-104.3711, 33.1965];    // Dexter, NM
 
     // 3) HELPER FUNCTIONS
 
@@ -406,7 +406,7 @@
 
       if (fraction >= 1) {
         statusTextEl.textContent =
-          "Dexter made it to Tunnel Hill, GA! 🎉🚇";
+          "Dexter made it to Dexter, NM! 🎉🐹";
       } else {
         const milesRemaining = Math.max(routeMiles - totalMiles, 0);
         statusTextEl.textContent = `About ${milesRemaining.toFixed(
